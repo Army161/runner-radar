@@ -1,0 +1,13 @@
+{
+  "name": "runner-radar",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Multi-agent Solana meme coin scanner: finds runners, blocks honeypots, vamps, bundles and rugs.",
+  "engines": { "node": ">=22.18" },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning server/index.ts",
+    "demo": "DEMO=1 ALLOW_DEV_LOGIN=1 node --env-file-if-exists=.env --disable-warning=ExperimentalWarning server/index.ts",
+    "test": "node --disable-warning=ExperimentalWarning --test \"server/test/*.test.ts\""
+  }
+}

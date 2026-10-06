@@ -1,0 +1,26 @@
+# Render Blueprint: one always-on web service with a small persistent disk for the database.
+# Secrets (OAuth, RPC, PumpPortal, Telegram) are added afterwards in the service's Environment tab.
+services:
+  - type: web
+    name: runner-radar
+    runtime: node
+    plan: starter            # free instances sleep after 15 min and can't have disks; the scanner must stay on
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /healthz
+    autoDeploy: true
+    disk:
+      name: radar-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_VERSION
+        value: 22.22.0
+      - key: NODE_ENV
+        value: production
+      - key: DB_PATH
+        value: /var/data/radar.db
+      - key: TRUST_PROXY
+        value: "1"
+      - key: FEED_DAILY_EVENTS
+        value: "50000"

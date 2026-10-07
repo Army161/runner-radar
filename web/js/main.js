@@ -8,6 +8,8 @@ import * as legal from './pages/legal.js';
 import * as settings from './pages/settings.js';
 import * as watchlist from './pages/watchlist.js';
 import * as admin from './pages/admin.js';
+import * as pricing from './pages/pricing.js';
+import * as playbook from './pages/playbook.js';
 
 // Web fonts load in the background so a slow or blocked font host never blanks the page.
 (() => {
@@ -22,9 +24,11 @@ const routes = [
   { re: /^\/how-it-works\/?$/, page: landing, title: 'How it works — Runner Radar', params: { section: 'how' } },
   { re: /^\/login\/?$/, page: authPage, title: 'Sign in — Runner Radar', params: { mode: 'login' } },
   { re: /^\/signup\/?$/, page: authPage, title: 'Create account — Runner Radar', params: { mode: 'signup' } },
+  { re: /^\/pricing\/?$/, page: pricing, title: 'Pricing — Runner Radar' },
   { re: /^\/onboarding\/?$/, page: onboarding, title: 'Set up — Runner Radar', auth: true },
   { re: /^\/app\/?$/, page: scanner, title: 'Scanner — Runner Radar', auth: true, onboarded: true },
   { re: /^\/app\/settings\/?$/, page: settings, title: 'Settings — Runner Radar', auth: true, onboarded: true },
+  { re: /^\/app\/playbook\/?$/, page: playbook, title: 'Playbook — Runner Radar', auth: true, onboarded: true },
   { re: /^\/app\/watchlist\/?$/, page: watchlist, title: 'Watchlist — Runner Radar', auth: true, onboarded: true },
   { re: /^\/app\/admin\/?$/, page: admin, title: 'Admin — Runner Radar', auth: true, onboarded: true },
   { re: /^\/app\/token\/([1-9A-HJ-NP-Za-km-z]{32,44})\/?$/, page: token, title: 'Token — Runner Radar', auth: true, onboarded: true, keys: ['mint'] },

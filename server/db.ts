@@ -83,6 +83,23 @@ export function openDb(path: string): DB {
       read INTEGER NOT NULL DEFAULT 0
     );
     CREATE INDEX IF NOT EXISTS alerts_user ON alerts(user_id, at DESC);
+    -- Billing: one row per user who has ever checked out.
+    CREATE TABLE IF NOT EXISTS subscriptions (
+      user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      customer TEXT,
+      sub_id TEXT,
+      tier TEXT NOT NULL DEFAULT 'free',
+      status TEXT NOT NULL DEFAULT 'none',
+      period_end INTEGER,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS usage_days (
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      day TEXT NOT NULL,
+      scans INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (user_id, day)
+    );
     -- Wallet reputation: deployers and the wallets that funded them.
     CREATE TABLE IF NOT EXISTS wallets_rep (
       address TEXT PRIMARY KEY,

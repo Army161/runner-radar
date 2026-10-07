@@ -10,13 +10,45 @@ export async function mount(root) {
   const status = await api('/api/status').catch(() => ({}));
   const frame = shell(root, me, 'settings', { showSources: false });
   const page = frame.body;
-  const st = { settings: me.settings, wallets: me.wallets, tgLinked: me.telegramLinked, tg: null };
+  const st = { settings: me.settings, wallets: me.wallets, tgLinked: me.telegramLinked, tg: null, plan: me.plan };
   let poll = null;
+
+  const billingParam = new URLSearchParams(location.search).get('billing');
+  if (billingParam) {
+    history.replaceState(null, '', '/app/settings');
+    if (billingParam === 'success') { toast('Subscription active — welcome aboard', 'good'); getMe(true).then((m) => { st.plan = m.plan; draw(); }).catch(() => {}); }
+    else toast('Checkout cancelled — no charge', 'info');
+  }
+
+  async function refreshPlan() { const m = await getMe(true); st.plan = m.plan; frame.setPlan(m.plan); draw(); }
 
   const save = async (patch) => {
     try { st.settings = (await api('/api/settings', { method: 'PUT', body: patch })).settings; draw(); toast('Saved', 'good'); }
     catch (e) { toast(e.message, 'error'); }
   };
+
+  function billingBlock() {
+    const p = st.plan;
+    if (!p) return '';
+    const bar = (label, used, max) => html`<div class="use"><span class="row between small"><span>${label}</span><b class="mono">${used} / ${max}</b></span><span class="bar"><i class="${used >= max ? 'blue' : ''}" style="width:${Math.min(100, Math.round((used / max) * 100))}%"></i></span></div>`;
+    const renews = p.periodEnd ? new Date(p.periodEnd).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : null;
+    return html`
+      <div class="row between wrap-row gap">
+        <div><span class="plan-chip ${p.tier}">${p.name}</span>
+          <span class="muted small">${p.tier === 'free' ? 'Free forever' : p.status === 'past_due' ? 'Payment issue — update your card' : renews ? `Renews ${renews}` : 'Active'}${p.demoBilling ? ' · demo billing' : ''}</span></div>
+        <div class="row gap wrap-row">
+          ${p.tier !== 'pro' && p.tier !== 'apex' ? html`<button class="btn primary" data-buy="pro">Runner Pro — $29/mo</button>` : ''}
+          ${p.tier !== 'apex' ? html`<button class="btn ${p.tier === 'pro' ? 'primary' : 'ghost'}" data-buy="apex">Apex — $79/mo</button>` : ''}
+          ${p.tier !== 'free' ? html`<button class="btn ghost" data-portal>${p.manageable ? 'Manage billing' : 'Cancel plan'}</button>` : html`<a class="btn ghost" href="/pricing" data-link>Compare plans</a>`}
+        </div>
+      </div>
+      <div class="uses">
+        ${bar('Tracked wallets', p.usage.wallets, p.limits.wallets)}
+        ${bar('Watchlist', p.usage.watchlist, p.limits.watchlist)}
+        ${bar('Scans today', p.usage.scansToday, p.limits.scansPerDay)}
+      </div>
+      ${p.tier === 'free' ? html`<p class="muted small">Scout gets ${p.limits.alertsPerDay} runner alerts a day in-app. Runner Pro adds unlimited alerts, exit signals, Telegram delivery and the full trader Playbook.</p>` : ''}`;
+  }
 
   function telegramBlock() {
     if (status.sources?.telegram !== 'connected') return html`<p class="muted">Telegram alerts aren't configured on this server yet. In-app alerts still work.</p>`;
@@ -33,6 +65,11 @@ export async function mount(root) {
     paint(page, html`
     <div class="settings wrap">
       <h1>Settings</h1>
+
+      <section class="card pad" aria-labelledby="h-plan">
+        <h2 id="h-plan">Plan & billing</h2>
+        ${billingBlock()}
+      </section>
 
       <section class="card pad" aria-labelledby="h-filters">
         <h2 id="h-filters">Filters</h2>
@@ -96,6 +133,22 @@ export async function mount(root) {
   page.addEventListener('click', async (e) => {
     const t = e.target.closest('button');
     if (!t) return;
+    if (t.dataset.buy) {
+      try {
+        const r = await api('/api/billing/checkout', { method: 'POST', body: { tier: t.dataset.buy } });
+        if (r.url) { location.href = r.url; return; }
+        if (r.demo) { toast(`Demo checkout — ${r.tier === 'apex' ? 'Apex' : 'Runner Pro'} active`, 'good'); await refreshPlan(); }
+      } catch (err) { toast(err.message, 'error'); }
+      return;
+    }
+    if ('portal' in t.dataset) {
+      try {
+        const r = await api('/api/billing/portal', { method: 'POST' });
+        if (r.url) { location.href = r.url; return; }
+        if (r.demo) { toast('Plan cancelled (demo)', 'info'); await refreshPlan(); }
+      } catch (err) { toast(err.message, 'error'); }
+      return;
+    }
     if (t.dataset.preset) save({ preset: t.dataset.preset });
     else if (t.dataset.gate) save({ gates: { [t.dataset.gate]: !st.settings.gates[t.dataset.gate] } });
     else if (t.dataset.alert) save({ alerts: { [t.dataset.alert]: !st.settings.alerts[t.dataset.alert] } });

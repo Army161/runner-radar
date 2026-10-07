@@ -2,7 +2,7 @@
 
 A multi-agent Solana meme coin scanner. Every new pump.fun launch runs through five **gatekeeper** agents (one hard fail blocks it, with the reason shown). Survivors are scored by **signal** agents into a 0–100 **Runner Score**. Runners reach your board and Telegram, and exit signals follow the tokens you were alerted on.
 
-Includes a landing page, Google / Discord / X sign-up and login, a 3-step onboarding, the live scanner, token deep-dive pages, a watchlist, an alerts inbox, a settings page, and an admin dashboard. It installs on a phone home screen as an app.
+Includes a landing page, Google / Discord / X sign-up and login, a 3-step onboarding, the live scanner, token deep-dive pages, a watchlist, an alerts inbox, the Runner Playbook (step-by-step strategy guide), a settings page with billing, Stripe monthly subscriptions, and an admin dashboard with MRR and track record. It installs on a phone home screen as an app.
 
 **Zero dependencies.** Node 22.18+ runs it directly: built-in SQLite, WebSocket, fetch and TypeScript. There's no `npm install`, no build step, and no third-party packages to keep patched.
 
@@ -15,7 +15,7 @@ Includes a landing page, Google / Discord / X sign-up and login, a 3-step onboar
 ```bash
 node -v            # needs v22.18 or newer
 npm run demo       # simulated market + one-click dev login → http://localhost:8787
-npm test           # 26 tests: agents, filters, rug memory, feed budget, backups, OAuth/session security, API
+npm test           # 31 tests: agents, filters, rug memory, feed budget, backups, OAuth/session security, billing, API
 ```
 
 Demo mode simulates launches on a real constant-product curve, including honeypots, vamps, bundles, serial ruggers and real runners, so you can see every agent fire. It is clearly labelled in the UI.
@@ -73,6 +73,28 @@ The scanner header shows today's feed usage ("Feed 12k/50k"). Hover it for the e
 - Tokens that later heat up on DexScreener (free) are put back on the stream.
 
 **Without a PumpPortal key (free mode),** you still get new launches, graduations, DexScreener trending and 5-minute stats, contract/vamp/dev checks and alerts. But there are no bundle, sniper or holder breakdowns or tracked-wallet signals, so far fewer tokens can qualify as runners. The PumpPortal API key controls a wallet: anyone with the key can trade its funds. Keep only a small balance there.
+
+## Plans & billing
+
+Monthly tiers, enforced server-side (`server/billing.ts` is the source of truth):
+
+| | Scout (free) | Runner Pro $29/mo | Apex $79/mo |
+|---|---|---|---|
+| Live scanner + safety gates + score | ✓ | ✓ | ✓ |
+| Token scans / day | 10 | 100 | 300 |
+| Tracked smart wallets | 3 | 25 | 50 |
+| Watchlist | 20 | 100 | 200 |
+| Runner alerts | 5/day, in-app | unlimited | unlimited |
+| Exit signals (dev sells, smart exits, score drop) | — | ✓ | ✓ |
+| Telegram delivery | — | ✓ | ✓ |
+| Runner Playbook | intro chapters | trader chapters | all incl. creator chapters |
+| Priority stream coverage when the feed budget is tight | — | — | ✓ |
+
+**Why these prices:** trading terminals (Photon, BullX, Trojan…) take ~1% per trade — an active trader pays far more than $29/mo in fees alone — and Nansen Pro is $49/mo for smart-money analytics. Runner Pro sits under that as the pump.fun-focused intel layer; Apex is for multi-wallet traders and creators. Change prices anytime with `PRICE_PRO_USD` / `PRICE_APEX_USD` (new Stripe prices are created automatically; existing subscribers keep their old price).
+
+**Stripe setup is one env var.** Set `STRIPE_SECRET_KEY`; on boot the app finds-or-creates the products/prices (by lookup key) and registers the webhook endpoint, storing its signing secret in the database. Webhooks are signature-verified with a 5-minute tolerance. Customers manage/cancel via the Stripe customer portal (enable it once in Stripe → Settings → Billing → Customer portal). Use test keys + card `4242 4242 4242 4242` to try the full flow. In `DEMO=1` mode checkout is simulated so you can click through every state without a Stripe account.
+
+**Honesty guardrail:** no copy in the app promises profits, and the Playbook opens with the ground rules. Tools that promise guaranteed wins invite chargebacks, platform bans and legal trouble — and are lying. Sell the edge, not a fantasy.
 
 ## Running it
 
@@ -149,6 +171,8 @@ server/
   alerts.ts             Telegram bot + alert engine
   test/                 node:test suites
   backup.ts             daily SQLite backups
+  billing.ts            Stripe REST client, tiers + entitlements, webhook verify
+  playbook.ts           the Runner Playbook content (mirrored at docs/PLAYBOOK.md)
 web/                    plain ES modules: shell.js (app frame, alerts inbox) · parts.js (shared table/filters)
   js/pages/             landing · auth · onboarding · scanner · token · watchlist · settings · admin · legal
 ```

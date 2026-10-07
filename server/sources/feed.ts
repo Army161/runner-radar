@@ -122,16 +122,20 @@ export class BudgetedFeed implements TradeFeed {
 
   dropped(mints: string[]) { this.unsub(mints); }
 
-  private watchedMints(): Set<string> {
+  private watchedLists(): { all: Set<string>; apex: Set<string> } {
     const rows = this.db.prepare('SELECT DISTINCT mint FROM watchlist').all() as Array<{ mint: string }>;
-    return new Set(rows.map((r) => r.mint));
+    const apexRows = this.db.prepare(`SELECT DISTINCT w.mint FROM watchlist w
+      JOIN subscriptions s ON s.user_id = w.user_id
+      WHERE s.tier = 'apex' AND s.status IN ('active', 'trialing', 'past_due')`).all() as Array<{ mint: string }>;
+    return { all: new Set(rows.map((r) => r.mint)), apex: new Set(apexRows.map((r) => r.mint)) };
   }
 
   tick(tokens: Iterable<TokenState>) {
     if (this.mode !== 'paid') return;
     this.rollDay();
     const now = this.now();
-    const watched = this.watchedMints();
+    // When the daily budget runs out, Apex subscribers' watched tokens keep their stream.
+    const { all: watched, apex } = this.watchedLists();
     const byMint = new Map<string, TokenState>();
     for (const t of tokens) byMint.set(t.mint, t);
     const overBudget = this.events >= this.cfg.feedBudget;
@@ -139,7 +143,7 @@ export class BudgetedFeed implements TradeFeed {
     for (const [mint, s] of this.subs) {
       const t = byMint.get(mint);
       if (!t) { drop.push(mint); continue; }
-      const priority = t.status === 'runner' || watched.has(mint);
+      const priority = t.status === 'runner' || (overBudget ? apex.has(mint) : watched.has(mint));
       if (priority) { s.trial = false; continue; }
       if (overBudget || t.status === 'blocked') { drop.push(mint); continue; }
       if (s.trial && now - s.since >= this.cfg.feedTrialMs) {
@@ -152,7 +156,8 @@ export class BudgetedFeed implements TradeFeed {
     this.unsub(drop);
     // Make sure runners and watched tokens are covered (budget allowing).
     for (const t of byMint.values()) {
-      if (!this.subs.has(t.mint) && (t.status === 'runner' || watched.has(t.mint)) && this.canSpend('priority')) this.sub(t.mint, false);
+      const wanted = t.status === 'runner' || (overBudget ? apex.has(t.mint) : watched.has(t.mint));
+      if (!this.subs.has(t.mint) && wanted && this.canSpend('priority')) this.sub(t.mint, false);
     }
     if (overBudget && this.wallets.length) this.pump.watchWallets([]);
     else if (!overBudget) this.pump.watchWallets(this.wallets);

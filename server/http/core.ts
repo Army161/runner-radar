@@ -18,7 +18,7 @@ export interface Ctx {
 }
 
 export type Handler = (c: Ctx) => unknown | Promise<unknown>;
-interface RouteOpts { auth?: boolean; limit?: 'auth' | 'scan' | 'api'; body?: boolean }
+interface RouteOpts { auth?: boolean; limit?: 'auth' | 'scan' | 'api'; body?: boolean; raw?: boolean; webhook?: boolean }
 interface Route { method: string; re: RegExp; keys: string[]; handler: Handler; opts: RouteOpts }
 
 export class HttpError extends Error {
@@ -93,6 +93,18 @@ export function setCookie(res: ServerResponse, name: string, value: string, o: C
   const prev = res.getHeader('Set-Cookie');
   const list = Array.isArray(prev) ? prev : prev ? [String(prev)] : [];
   res.setHeader('Set-Cookie', [...list, parts.join('; ')]);
+}
+
+/** Raw request body as text (for signature-verified webhooks). */
+export async function readRawBody(req: IncomingMessage, limit = 262_144): Promise<string> {
+  let size = 0;
+  const chunks: Buffer[] = [];
+  for await (const chunk of req) {
+    size += (chunk as Buffer).length;
+    if (size > limit) throw new HttpError(413, 'Body too large');
+    chunks.push(chunk as Buffer);
+  }
+  return Buffer.concat(chunks).toString('utf8');
 }
 
 export async function readJsonBody(req: IncomingMessage, limit = 32_768): Promise<any> {

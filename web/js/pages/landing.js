@@ -25,6 +25,7 @@ export async function mount(root, params) {
       <nav class="row gap" aria-label="Main">
         <a href="#how" class="navlink hide-sm">How it works</a>
         <a href="#safety" class="navlink hide-sm">Safety</a>
+        <a href="/pricing" class="navlink" data-link>Pricing</a>
         ${me ? html`<a class="btn primary" href="/app" data-link>Open app</a>` : html`<a class="navlink" href="/login" data-link>Sign in</a><a class="btn primary" href="/signup" data-link>Get started</a>`}
       </nav>
     </div>
@@ -36,7 +37,7 @@ export async function mount(root, params) {
       <h1>Find the runners.<br><span class="accent">Skip the rugs.</span></h1>
       <p class="lede">Nine AI agents check every new meme coin the second it launches. Honeypots, vamps, bundled launches and serial ruggers are blocked before they reach your screen. What survives is ranked by how it is actually trading.</p>
       <div class="row gap wrap-row">${cta}</div>
-      <p class="fine">Sign in with Google, Discord or X. We never ask for your seed phrase or private keys, and we can't trade from your wallet.</p>
+      <p class="fine">Free to start · Runner Pro $29/mo · <a href="/pricing" data-link>see plans</a>. Sign in with Google, Discord or X. We never ask for your seed phrase or private keys, and we can't trade from your wallet.</p>
 
       <div class="hero-board" aria-hidden="true">
         <div class="hb-row hb-head"><span>TOKEN</span><span>SAFETY</span><span>SCORE</span></div>

@@ -15,14 +15,15 @@ import type { TradeFeed } from './sources/feed.ts';
 import { Orchestrator } from './agents/orchestrator.ts';
 import { AlertEngine, OwnerAlerts, Telegram } from './alerts.ts';
 import { Backups } from './backup.ts';
+import { Billing } from './billing.ts';
 import { Auth } from './http/auth.ts';
 import { apiRoutes } from './http/api.ts';
 import type { Ctx } from './http/core.ts';
-import { HttpError, RateLimiter, Router, clientIp, json, parseCookies, readJsonBody, sameOrigin, securityHeaders, serveStatic } from './http/core.ts';
+import { HttpError, RateLimiter, Router, clientIp, json, parseCookies, readJsonBody, readRawBody, sameOrigin, securityHeaders, serveStatic } from './http/core.ts';
 import { log, onError } from './util.ts';
 
 const WEB_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', 'web');
-const SPA_ROUTES = /^\/(app(\/.*)?|login|signup|onboarding|terms|privacy|how-it-works)\/?$/;
+const SPA_ROUTES = /^\/(app(\/.*)?|login|signup|onboarding|pricing|terms|privacy|how-it-works)\/?$/;
 
 const db = openDb(cfg.dbPath);
 const bus = new EventEmitter();
@@ -55,13 +56,14 @@ const tg = new Telegram(cfg, db);
 const alerts = new AlertEngine(cfg, db, bus, tg, orch);
 const auth = new Auth(cfg, db);
 const owner = new OwnerAlerts(db, tg, cfg.adminEmails);
+const billing = new Billing(cfg, db);
 const backups = cfg.dbPath === ':memory:' ? null : new Backups(db, cfg.dbPath);
 onError((msg) => owner.send('error', `Error: ${msg.split('\n')[0]}`));
 const limiter = new RateLimiter();
 
 const router = new Router();
 auth.routes(router);
-apiRoutes(router, { cfg, db, bus, store, orch, tg, alerts, pump, dex, feed, backups });
+apiRoutes(router, { cfg, db, bus, store, orch, tg, alerts, pump, dex, feed, backups, billing });
 router.add('GET', '/healthz', () => ({ ok: true }));
 
 const server = createServer(async (req, res) => {
@@ -80,12 +82,13 @@ const server = createServer(async (req, res) => {
       throw new HttpError(404, 'Not found');
     }
     const { route, params } = hit;
-    if (method !== 'GET' && method !== 'HEAD' && !sameOrigin(req, cfg)) throw new HttpError(403, 'Cross-origin request blocked');
+    if (!route.opts.webhook && method !== 'GET' && method !== 'HEAD' && !sameOrigin(req, cfg)) throw new HttpError(403, 'Cross-origin request blocked');
     if (!limiter.allow(route.opts.limit ?? 'api', ip)) throw new HttpError(429, 'Slow down — too many requests');
     const c: Ctx = { req, res, url, ip, params, cookies: parseCookies(req.headers.cookie), user: null, body: undefined };
     c.user = auth.userFromCookie(c);
     if (route.opts.auth && !c.user) throw new HttpError(401, 'Sign in required');
     if (route.opts.body) c.body = await readJsonBody(req);
+    else if (route.opts.raw) c.body = await readRawBody(req);
     const out = await route.handler(c);
     if (out !== undefined && !res.headersSent) json(res, 200, out);
   } catch (e: any) {
@@ -109,6 +112,7 @@ dex?.start();
 replay?.start();
 tg.start();
 backups?.start();
+if (!cfg.demo) billing.start();
 
 // Owner watchdog: pump.fun feed down, trade budget used up, alert-history housekeeping.
 let pumpDownSince: number | null = null;

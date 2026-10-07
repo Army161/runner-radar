@@ -5,6 +5,8 @@ import type { TokenState, UserSettings } from './types.ts';
 import type { Orchestrator } from './agents/orchestrator.ts';
 import { evaluateFor, PRESETS } from './agents/filters.ts';
 import { fetchJson, log, randomToken, sleep } from './util.ts';
+import { TIERS, alertsToday, tierOf } from './billing.ts';
+import type { Tier } from './billing.ts';
 
 export function loadSettings(db: DB, userId: string): UserSettings {
   const row = db.prepare('SELECT json FROM settings WHERE user_id = ?').get(userId) as { json: string } | undefined;
@@ -78,7 +80,7 @@ export class Telegram {
   stop() { this.stopped = true; }
 }
 
-interface AlertUser { id: string; chat_id: string | null; settings: UserSettings }
+interface AlertUser { id: string; chat_id: string | null; settings: UserSettings; tier: Tier }
 
 /** Decides who gets told about what, once. Delivers in-app (SSE) and on Telegram. */
 export class AlertEngine {
@@ -94,8 +96,8 @@ export class AlertEngine {
 
   private getUsers(): AlertUser[] {
     if (Date.now() - this.loadedAt < 30_000) return this.users;
-    const rows = this.db.prepare(`SELECT u.id, t.chat_id FROM users u LEFT JOIN telegram_links t ON t.user_id = u.id WHERE u.onboarded = 1`).all() as Array<{ id: string; chat_id: string | null }>;
-    this.users = rows.map((r) => ({ id: r.id, chat_id: r.chat_id, settings: loadSettings(this.db, r.id) })).filter((u) => u.settings.alerts.enabled);
+    const rows = this.db.prepare(`SELECT u.id, u.email, t.chat_id FROM users u LEFT JOIN telegram_links t ON t.user_id = u.id WHERE u.onboarded = 1`).all() as Array<{ id: string; email: string | null; chat_id: string | null }>;
+    this.users = rows.map((r) => ({ id: r.id, chat_id: r.chat_id, settings: loadSettings(this.db, r.id), tier: tierOf(this.db, this.cfg, r) })).filter((u) => u.settings.alerts.enabled);
     this.loadedAt = Date.now();
     return this.users;
   }
@@ -119,6 +121,8 @@ export class AlertEngine {
         const smart = Number(t.signals.smart?.metrics?.holding ?? 0);
         const v = evaluateFor(t, u.settings, this.cfg, this.orch.solUsd, smart);
         if (v.blockedBy.length) continue;
+        const cap = TIERS[u.tier].alertsPerDay;
+        if (cap !== null && alertsToday(this.db, u.id) >= cap) continue;
         if (!this.claim(u.id, t.mint, 'runner')) continue;
         this.db.prepare('INSERT OR IGNORE INTO watchlist (user_id, mint, added_at, symbol) VALUES (?, ?, ?, ?)').run(u.id, t.mint, Date.now(), t.symbol);
         this.deliver(u, t, `RUNNER $${t.symbol} — score ${t.score}`, this.summary(t));
@@ -145,6 +149,8 @@ export class AlertEngine {
     if (!watchers.length) return;
     const ids = new Set(watchers.map((w) => w.user_id));
     for (const u of this.getUsers()) {
+      // Exit signals are a paid feature; the free tier gets runner alerts only.
+      if (!TIERS[u.tier].exitSignals) continue;
       if (!ids.has(u.id) || !wants(u.settings) || !this.claim(u.id, t.mint, kind)) continue;
       this.deliver(u, t, 'EXIT SIGNAL', text);
     }
@@ -153,7 +159,7 @@ export class AlertEngine {
   private deliver(u: AlertUser, t: TokenState, title: string, body: string) {
     this.db.prepare('INSERT INTO alerts (user_id, mint, symbol, title, body, at) VALUES (?, ?, ?, ?, ?, ?)').run(u.id, t.mint, t.symbol, title, body, Date.now());
     this.bus.emit('userAlert', { userId: u.id, title, body, mint: t.mint, symbol: t.symbol, t: Date.now() });
-    if (u.chat_id) this.tg.send(u.chat_id, `<b>${esc(title)}</b>\n${esc(body)}\n${this.cfg.appUrl}/app/token/${t.mint}`);
+    if (u.chat_id && TIERS[u.tier].telegram) this.tg.send(u.chat_id, `<b>${esc(title)}</b>\n${esc(body)}\n${this.cfg.appUrl}/app/token/${t.mint}`);
   }
 }
 

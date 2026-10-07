@@ -46,6 +46,12 @@ export const config = {
   feedTractionBuyers: int(env.FEED_TRACTION_BUYERS, 6),
   feedCoolMs: int(env.FEED_COOL_MS, 180_000),
 
+  /** Stripe (optional). With just STRIPE_SECRET_KEY set, products, prices and the webhook are created automatically. */
+  stripeKey: env.STRIPE_SECRET_KEY || '',
+  stripeWebhookSecret: env.STRIPE_WEBHOOK_SECRET || '',
+  priceProUsd: int(env.PRICE_PRO_USD, 29),
+  priceApexUsd: int(env.PRICE_APEX_USD, 79),
+
   /** Verified emails that can open the admin dashboard and receive owner alerts on Telegram. */
   adminEmails: list(env.ADMIN_EMAILS).map((e) => e.toLowerCase()),
 

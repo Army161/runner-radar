@@ -9,6 +9,9 @@ import type { PumpPortal } from '../sources/pumpportal.ts';
 import type { DexScreener } from '../sources/dexscreener.ts';
 import type { TradeFeed } from '../sources/feed.ts';
 import type { Backups } from '../backup.ts';
+import type { Billing, Tier } from '../billing.ts';
+import { TIERS, bumpScan, scansToday, tierOf } from '../billing.ts';
+import { playbookFor } from '../playbook.ts';
 import { recentErrors } from '../util.ts';
 import type { FeedItem } from '../types.ts';
 import type { Ctx, Router } from './core.ts';
@@ -21,7 +24,7 @@ import { isBase58Address, str } from '../util.ts';
 
 interface Deps {
   cfg: Config; db: DB; bus: EventEmitter; store: TokenStore; orch: Orchestrator; tg: Telegram; alerts: AlertEngine;
-  pump: PumpPortal | null; dex: DexScreener | null; feed: TradeFeed; backups: Backups | null;
+  pump: PumpPortal | null; dex: DexScreener | null; feed: TradeFeed; backups: Backups | null; billing: Billing;
 }
 
 interface Client { userId: string; res: ServerResponse; tab: Tab; win: string; last: string }
@@ -39,6 +42,7 @@ export function apiRoutes(r: Router, d: Deps) {
     return cfg.allowDevLogin && !!db.prepare("SELECT 1 FROM oauth_accounts WHERE user_id = ? AND provider = 'dev'").get(u.id);
   };
   const touch = db.prepare('UPDATE users SET last_seen = ? WHERE id = ?');
+  const myTier = (c: Ctx): Tier => tierOf(db, cfg, me(c));
 
   const refreshWallets = () => {
     const rows = db.prepare('SELECT DISTINCT address FROM tracked_wallets').all() as Array<{ address: string }>;
@@ -66,7 +70,19 @@ export function apiRoutes(r: Router, d: Deps) {
     const wallets = db.prepare('SELECT address, label FROM tracked_wallets WHERE user_id = ? ORDER BY address').all(u.id);
     const providers = db.prepare('SELECT provider FROM oauth_accounts WHERE user_id = ?').all(u.id).map((x: any) => x.provider);
     touch.run(Date.now(), u.id);
-    return { user: { id: u.id, name: u.name, email: u.email, avatar: u.avatar, onboarded: !!u.onboarded, providers, admin: isAdmin(c) }, settings: loadSettings(db, u.id), telegramLinked: !!tg, wallets, presets: PRESETS };
+    const tier = myTier(c);
+    const sub = d.billing.subOf(u.id);
+    const watchlistN = (db.prepare('SELECT COUNT(*) AS n FROM watchlist WHERE user_id = ?').get(u.id) as { n: number }).n;
+    return {
+      user: { id: u.id, name: u.name, email: u.email, avatar: u.avatar, onboarded: !!u.onboarded, providers, admin: isAdmin(c) },
+      settings: loadSettings(db, u.id), telegramLinked: !!tg, wallets, presets: PRESETS,
+      plan: {
+        tier, name: TIERS[tier].name, limits: TIERS[tier],
+        usage: { wallets: wallets.length, watchlist: watchlistN, scansToday: scansToday(db, u.id) },
+        status: sub?.status ?? 'none', periodEnd: sub?.period_end ?? null,
+        demoBilling: cfg.demo, stripe: d.billing.live, manageable: !!sub?.customer && sub.customer !== 'demo',
+      },
+    };
   }, { auth: true });
 
   r.add('PUT', '/api/settings', (c) => {
@@ -86,8 +102,9 @@ export function apiRoutes(r: Router, d: Deps) {
   r.add('POST', '/api/wallets', (c) => {
     const address = str(c.body?.address, 60).trim();
     if (!isBase58Address(address)) throw new HttpError(400, 'That is not a valid Solana address');
+    const tier = myTier(c);
     const count = (db.prepare('SELECT COUNT(*) AS n FROM tracked_wallets WHERE user_id = ?').get(me(c).id) as { n: number }).n;
-    if (count >= 50) throw new HttpError(400, 'Up to 50 tracked wallets');
+    if (count >= TIERS[tier].wallets) throw new HttpError(402, `${TIERS[tier].name} tracks up to ${TIERS[tier].wallets} wallets. Upgrade in Settings for more.`);
     db.prepare('INSERT OR IGNORE INTO tracked_wallets (user_id, address, label) VALUES (?, ?, ?)').run(me(c).id, address, str(c.body?.label, 40));
     refreshWallets();
     return { ok: true };
@@ -125,6 +142,11 @@ export function apiRoutes(r: Router, d: Deps) {
   r.add('POST', '/api/scan', async (c) => {
     const mint = str(c.body?.mint, 60).trim();
     if (!isBase58Address(mint)) throw new HttpError(400, 'Paste a valid Solana token address');
+    if (!store.get(mint)) {
+      const tier = myTier(c);
+      if (scansToday(db, me(c).id) >= TIERS[tier].scansPerDay) throw new HttpError(402, `Daily scan limit reached (${TIERS[tier].scansPerDay} on ${TIERS[tier].name}). Upgrade in Settings for more.`);
+      bumpScan(db, me(c).id);
+    }
     const t = await orch.scan(mint, 'user');
     if (!t) throw new HttpError(404, 'Token not found');
     orch.evaluate(t);
@@ -133,8 +155,9 @@ export function apiRoutes(r: Router, d: Deps) {
 
   r.add('POST', '/api/watchlist/:mint', (c) => {
     if (!isBase58Address(c.params.mint)) throw new HttpError(400, 'Bad address');
+    const tier = myTier(c);
     const count = (db.prepare('SELECT COUNT(*) AS n FROM watchlist WHERE user_id = ?').get(me(c).id) as { n: number }).n;
-    if (count >= 200) throw new HttpError(400, 'Up to 200 tokens on your watchlist');
+    if (count >= TIERS[tier].watchlist) throw new HttpError(402, `${TIERS[tier].name} watches up to ${TIERS[tier].watchlist} tokens. Upgrade in Settings for more.`);
     db.prepare('INSERT OR IGNORE INTO watchlist (user_id, mint, added_at, symbol) VALUES (?, ?, ?, ?)').run(me(c).id, c.params.mint, Date.now(), store.get(c.params.mint)?.symbol ?? null);
     return { ok: true };
   }, { auth: true });
@@ -182,7 +205,11 @@ export function apiRoutes(r: Router, d: Deps) {
         active24h: one('SELECT COUNT(*) AS n FROM users WHERE last_seen >= ?', now - 86_400_000),
         telegram: one('SELECT COUNT(*) AS n FROM telegram_links'),
         alerts24h: one('SELECT COUNT(*) AS n FROM alerts WHERE at >= ?', now - 86_400_000),
+        pro: one("SELECT COUNT(*) AS n FROM subscriptions WHERE tier = 'pro' AND status IN ('active','trialing','past_due')"),
+        apex: one("SELECT COUNT(*) AS n FROM subscriptions WHERE tier = 'apex' AND status IN ('active','trialing','past_due')"),
       },
+      mrrUsd: one("SELECT COUNT(*) AS n FROM subscriptions WHERE tier = 'pro' AND status IN ('active','trialing','past_due')") * d.billing.priceUsd('pro')
+        + one("SELECT COUNT(*) AS n FROM subscriptions WHERE tier = 'apex' AND status IN ('active','trialing','past_due')") * d.billing.priceUsd('apex'),
       trackRecord: {
         days, promoted: outcomes.length,
         hit2x: pct(2), hit5x: pct(5),
@@ -202,6 +229,43 @@ export function apiRoutes(r: Router, d: Deps) {
   r.add('GET', '/api/stats', () => {
     const rows = db.prepare('SELECT COUNT(*) AS n, SUM(rugged) AS rugs, AVG(peak_mcap / mcap_at_promote) AS avgPeakX FROM outcomes').get() as any;
     return { promoted: rows.n ?? 0, rugged: rows.rugs ?? 0, avgPeakMultiple: rows.avgPeakX ? Math.round(rows.avgPeakX * 100) / 100 : null };
+  }, { auth: true });
+
+  // ---------- billing & playbook ----------
+  r.add('GET', '/api/plans', () => ({
+    checkout: d.billing.live ? 'stripe' : cfg.demo ? 'demo' : 'off',
+    tiers: (['free', 'pro', 'apex'] as const).map((t) => ({
+      ...TIERS[t], priceUsd: t === 'free' ? 0 : d.billing.priceUsd(t),
+    })),
+  }));
+
+  r.add('POST', '/api/billing/checkout', async (c) => {
+    const tier = c.body?.tier === 'apex' ? 'apex' : c.body?.tier === 'pro' ? 'pro' : null;
+    if (!tier) throw new HttpError(400, 'Pick a plan');
+    if (cfg.demo) { d.billing.demoCheckout(me(c).id, tier); d.alerts.invalidate(); return { demo: true, tier }; }
+    if (!d.billing.live) throw new HttpError(400, 'Billing is not configured on this server yet (set STRIPE_SECRET_KEY)');
+    return { url: await d.billing.checkoutUrl(me(c), tier) };
+  }, { auth: true, body: true });
+
+  r.add('POST', '/api/billing/portal', async (c) => {
+    if (cfg.demo || d.billing.customerOf(me(c).id) === 'demo') { d.billing.demoCancel(me(c).id); d.alerts.invalidate(); return { demo: true }; }
+    if (!d.billing.live) throw new HttpError(400, 'Billing is not configured on this server');
+    return { url: await d.billing.portalUrl(me(c).id) };
+  }, { auth: true });
+
+  r.add('POST', '/api/billing/webhook', (c) => {
+    const sig = c.req.headers['stripe-signature'];
+    if (!d.billing.verifySignature(String(c.body ?? ''), Array.isArray(sig) ? sig[0] : sig)) throw new HttpError(400, 'Bad signature');
+    let event: any;
+    try { event = JSON.parse(String(c.body)); } catch { throw new HttpError(400, 'Bad payload'); }
+    d.billing.applyEvent(event);
+    d.alerts.invalidate();
+    return { received: true };
+  }, { raw: true, webhook: true });
+
+  r.add('GET', '/api/playbook', (c) => {
+    const tier = myTier(c);
+    return { tier, name: TIERS[tier].name, sections: playbookFor(tier) };
   }, { auth: true });
 
   r.add('DELETE', '/api/account', (c) => {

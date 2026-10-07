@@ -17,7 +17,7 @@ function feedChip(f) {
  * active: 'scanner' | 'watchlist' | 'settings' | 'admin' | ''
  */
 export function shell(root, me, active, { showSources = true } = {}) {
-  const nav = [['scanner', '/app', 'Scanner'], ['watchlist', '/app/watchlist', 'Watchlist'], ['settings', '/app/settings', 'Settings']];
+  const nav = [['scanner', '/app', 'Scanner'], ['watchlist', '/app/watchlist', 'Watchlist'], ['playbook', '/app/playbook', 'Playbook'], ['settings', '/app/settings', 'Settings']];
   if (me.user.admin) nav.push(['admin', '/app/admin', 'Admin']);
   paint(root, html`
   <div class="app">
@@ -32,6 +32,7 @@ export function shell(root, me, active, { showSources = true } = {}) {
         <input id="q" name="q" placeholder="Paste a token address to scan it" autocomplete="off" spellcheck="false">
       </form>
       <div class="user">
+        ${me.plan ? html`<a class="plan-chip ${me.plan.tier}" href="${me.plan.tier === 'free' ? '/pricing' : '/app/settings'}" data-link title="${me.plan.tier === 'free' ? 'See plans' : 'Manage plan'}">${me.plan.name}</a>` : ''}
         <div class="inbox-wrap">
           <button class="bell" data-bell aria-label="Alerts" aria-expanded="false" aria-haspopup="true">${icon('bell', 18)}<b data-unread hidden></b></button>
           <div class="inbox" data-inbox hidden></div>
@@ -107,6 +108,13 @@ export function shell(root, me, active, { showSources = true } = {}) {
 
   return {
     body: $('[data-body]'),
+    setPlan(plan) {
+      const chip = root.querySelector('.plan-chip');
+      if (!chip || !plan) return;
+      chip.className = `plan-chip ${plan.tier}`;
+      chip.textContent = plan.name;
+      chip.setAttribute('href', plan.tier === 'free' ? '/pricing' : '/app/settings');
+    },
     bump(alert) { setUnread(unread + 1); if (alert) toast(`${alert.title}: ${alert.body}`, 'good'); },
     cleanup() { timers.forEach(clearInterval); document.removeEventListener('click', onDocClick); document.removeEventListener('keydown', onKey); },
   };

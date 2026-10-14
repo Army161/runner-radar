@@ -14,7 +14,7 @@ Includes a landing page, Google / Discord / X sign-up and login, a 3-step onboar
 
 ```bash
 node -v            # needs v22.18 or newer
-npm run demo       # simulated market + one-click dev login → http://localhost:8787
+npm run demo       # simulated market + one-click dev login → http://localhost:8787 (works on Windows, macOS, Linux)
 npm test           # 31 tests: agents, filters, rug memory, feed budget, backups, OAuth/session security, billing, API
 ```
 
@@ -39,6 +39,22 @@ Register this redirect URI with each provider: `{APP_URL}/auth/{provider}/callba
 | Google | console.cloud.google.com → APIs & Services → Credentials → OAuth client (Web) | Scopes: openid, email, profile |
 | Discord | discord.com/developers → Applications → OAuth2 | Scopes: identify, email |
 | X | developer.x.com → Project → App → User authentication settings | OAuth 2.0, type **Web App (confidential)**, scopes users.read tweet.read |
+
+## Deploying on Vercel (web) + Render (engine)
+
+Vercel serves the site on your domain; the scanner engine runs on an always-on host behind it. The engine keeps a live pump.fun WebSocket, background agents, and a database on disk. Vercel Functions scale to zero and have no persistent disk, so the engine can't live there. Visitors only ever see your Vercel URL: `/api/*`, `/auth/*` and `/healthz` are proxied to the engine, so cookies, OAuth and Stripe webhooks all stay first-party.
+
+1. Deploy the engine on Render (section below). Note its URL, e.g. `https://runner-radar.onrender.com`.
+2. Vercel → **Add New → Project** → import this repo. `vercel.json` handles the build (no framework, no dependencies).
+3. Vercel project → **Settings → Environment Variables** → `BACKEND_URL` = the engine URL → redeploy.
+4. On the engine (Render → Environment), set:
+   - `APP_URL` = your Vercel URL, e.g. `https://runner-radar.vercel.app`, or your custom domain
+   - `TRUST_PROXY=2` (visitor → Vercel → Render)
+5. Register OAuth redirect URIs on the Vercel URL: `https://<your-vercel-domain>/auth/google/callback`.
+
+Without `BACKEND_URL`, the Vercel site still builds: pages load, and sign-in and data calls return a clear 503 message. Live updates use Server-Sent Events through the proxy and reconnect on their own if the proxy recycles a connection.
+
+**Plans:** Vercel's Hobby plan is for personal, non-commercial use. Move the team to Pro before you charge subscribers.
 
 ## Deploying on Render
 
@@ -173,6 +189,8 @@ server/
   backup.ts             daily SQLite backups
   billing.ts            Stripe REST client, tiers + entitlements, webhook verify
   playbook.ts           the Runner Playbook content (mirrored at docs/PLAYBOOK.md)
+  demo.ts               cross-platform `npm run demo` entry
+scripts/vercel-build.mjs  Vercel Build Output: static web + proxy to BACKEND_URL
 web/                    plain ES modules: shell.js (app frame, alerts inbox) · parts.js (shared table/filters)
   js/pages/             landing · auth · onboarding · scanner · token · watchlist · settings · admin · legal
 ```

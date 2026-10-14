@@ -4,10 +4,13 @@
   "private": true,
   "type": "module",
   "description": "Multi-agent Solana meme coin scanner: finds runners, blocks honeypots, vamps, bundles and rugs.",
-  "engines": { "node": ">=22.18" },
+  "engines": {
+    "node": ">=22.18"
+  },
   "scripts": {
     "start": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning server/index.ts",
-    "demo": "DEMO=1 ALLOW_DEV_LOGIN=1 node --env-file-if-exists=.env --disable-warning=ExperimentalWarning server/index.ts",
-    "test": "node --disable-warning=ExperimentalWarning --test \"server/test/*.test.ts\""
+    "demo": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning server/demo.ts",
+    "test": "node --disable-warning=ExperimentalWarning --test \"server/test/*.test.ts\"",
+    "build:vercel": "node scripts/vercel-build.mjs"
   }
 }

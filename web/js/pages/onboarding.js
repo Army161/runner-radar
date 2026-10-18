@@ -129,7 +129,7 @@ export async function mount(root) {
       await api(`/api/wallets/${encodeURIComponent(t.dataset.rm)}`, { method: 'DELETE' }).catch((err) => toast(err.message, 'error'));
       st.wallets = st.wallets.filter((w) => w.address !== t.dataset.rm); draw();
     } else if ('finish' in t.dataset) {
-      try { await api('/api/onboarding/complete', { method: 'POST' }); clearMe(); navigate('/app'); } catch (err) { toast(err.message, 'error'); }
+      try { await api('/api/onboarding/complete', { method: 'POST' }); clearMe(); navigate('/app'); toast("You're on Scout (free) — upgrade anytime in Settings", 'good'); } catch (err) { toast(err.message, 'error'); }
     }
   });
 

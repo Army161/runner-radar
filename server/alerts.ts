@@ -124,7 +124,8 @@ export class AlertEngine {
         const cap = TIERS[u.tier].alertsPerDay;
         if (cap !== null && alertsToday(this.db, u.id) >= cap) continue;
         if (!this.claim(u.id, t.mint, 'runner')) continue;
-        this.db.prepare('INSERT OR IGNORE INTO watchlist (user_id, mint, added_at, symbol) VALUES (?, ?, ?, ?)').run(u.id, t.mint, Date.now(), t.symbol);
+        const wl = Number((this.db.prepare('SELECT COUNT(*) AS n FROM watchlist WHERE user_id = ?').get(u.id) as any)?.n ?? 0);
+        if (wl < TIERS[u.tier].watchlist) this.db.prepare('INSERT OR IGNORE INTO watchlist (user_id, mint, added_at, symbol) VALUES (?, ?, ?, ?)').run(u.id, t.mint, Date.now(), t.symbol);
         this.deliver(u, t, `RUNNER $${t.symbol} — score ${t.score}`, this.summary(t));
       }
     } else if (prevScore >= 70 && t.score < 70) {

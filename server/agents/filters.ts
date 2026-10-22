@@ -62,6 +62,7 @@ export function evaluateFor(t: TokenState, s: UserSettings, cfg: Config, solUsd:
   if (s.gates.honeypot && g.honeypot?.status === 'fail') blockedBy.push({ tag: 'HONEYPOT', why: g.honeypot.summary });
   if (s.gates.vamp && g.vamp?.status === 'fail') blockedBy.push({ tag: 'VAMP', why: g.vamp.summary });
   if (s.gates.devHistory && g.dev?.status === 'fail') blockedBy.push({ tag: t.rugged ? 'RUG' : 'DEV HISTORY', why: g.dev.summary });
+  if (g.jev?.status === 'fail') blockedBy.push({ tag: 'AI SCAM', why: `Jev scam judge: ${g.jev.summary}` });
   if (s.gates.socials && !t.meta.twitter && !t.meta.telegram) blockedBy.push({ tag: 'NO SOCIALS', why: 'No X or Telegram linked' });
 
   const hasLaunchData = t.source === 'pump' || t.source === 'replay';

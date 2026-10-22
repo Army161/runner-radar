@@ -12,5 +12,8 @@
     "demo": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning server/demo.ts",
     "test": "node --disable-warning=ExperimentalWarning --test \"server/test/*.test.ts\"",
     "build:vercel": "node scripts/vercel-build.mjs"
+  },
+  "dependencies": {
+    "@typesafe-ai/sdk": "0.7.0"
   }
 }

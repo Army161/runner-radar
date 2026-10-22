@@ -11,16 +11,20 @@ import { TokenStore, blankToken, short } from '../store.ts';
 import { GATE_TAGS, holderMetrics, runGates } from './gates.ts';
 import type { VampMatch } from './gates.ts';
 import { devReputation, graduationWatch, holderHealth, momentum, narrative, runnerScore, smartMoney } from './signals.ts';
+import { jevGate } from './jev.ts';
+import type { JevJudge } from './jev.ts';
 import { WorkQueue, imageKey, log, normName, twitterHandle } from '../util.ts';
 
 interface Deps {
   cfg: Config; db: DB; bus: EventEmitter; chain: Chain; store: TokenStore;
   feed: TradeFeed; dex: DexScreener | null; extraSmart?: string[];
+  /** Jev scam judge (TypeSafe System One). Optional: off without TYPESAFE_API_KEY. */
+  jev?: JevJudge | null;
 }
 
 interface IndexEntry { mint: string; symbol: string; at: number }
 
-const AGENT_NAMES: Record<string, string> = { contract: 'CONTRACT AUDITOR', honeypot: 'HONEYPOT SIM', vamp: 'VAMP DETECTOR', dev: 'DEV FORENSICS' };
+const AGENT_NAMES: Record<string, string> = { contract: 'CONTRACT AUDITOR', honeypot: 'HONEYPOT SIM', vamp: 'VAMP DETECTOR', dev: 'DEV FORENSICS', jev: 'JEV SCAM JUDGE' };
 
 export class Orchestrator {
   readonly feed: FeedItem[] = [];
@@ -35,6 +39,7 @@ export class Orchestrator {
   private smartBurst = new Map<string, number[]>();
   private metaQ = new WorkQueue(4, 300);
   private auditQ = new WorkQueue(2, 400);
+  private jevQ = new WorkQueue(3, 100);
   private timers: NodeJS.Timeout[] = [];
 
   constructor(d: Deps) {
@@ -245,6 +250,36 @@ export class Orchestrator {
     });
   }
 
+  /** Asks Jev for a verdict. Runs in the background; the next evaluation applies it. */
+  private queueJev(t: TokenState) {
+    const jev = this.d.jev!;
+    t.jevQueued = true;
+    t.jevTriedAt = Date.now();
+    const queued = this.jevQ.push(async () => {
+      try {
+        if (!this.d.store.get(t.mint)) return;
+        const before = jevGateStatus(t, this.d.cfg);
+        const v = await jev.judge(t, Number(t.signals.smart?.metrics?.holding ?? 0));
+        if (!v) return;
+        t.jev = v;
+        t.dirty = true;
+        const after = jevGateStatus(t, this.d.cfg);
+        if (after === before || after === 'pass') return;
+        const pct = Math.round(v.scam * 100);
+        const pattern = v.pattern.replace('_', ' ');
+        if (after === 'fail') {
+          this.d.store.addTimeline(t, `Jev: ${pct}% scam probability (${pattern})`, 'warn');
+        } else {
+          this.d.store.addTimeline(t, `Jev: elevated risk — ${pct}% scam probability (${pattern})`, 'warn');
+          this.push('JEV SCAM JUDGE', 'warn', `Caution on $${t.symbol}: Jev puts it at ${pct}% scam probability (${pattern}).`, t);
+        }
+      } finally {
+        t.jevQueued = false;
+      }
+    });
+    if (!queued) t.jevQueued = false;
+  }
+
   private checkVamp(t: TokenState) {
     const keys: Array<[string, string, boolean]> = [];
     const n = normName(t.name), s = normName(t.symbol);
@@ -314,6 +349,7 @@ export class Orchestrator {
     else t.status = 'watching';
 
     if (t.status !== prevStatus) this.onStatusChange(t, prevStatus);
+    if (this.d.jev?.wants(t, now)) this.queueJev(t);
     t.dirty = false;
     bus.emit('evaluated', t, prevScore, prevStatus);
   }
@@ -394,5 +430,7 @@ export class Orchestrator {
     if (drop.length) this.d.feed.dropped(drop);
   }
 }
+
+const jevGateStatus = (t: TokenState, cfg: Config) => jevGate(t, cfg).status;
 
 const pick = (m: TokenState['meta']) => Object.fromEntries(Object.entries(m).filter(([, v]) => v));

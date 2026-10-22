@@ -73,6 +73,17 @@ export interface Audit {
   funder: string | null;
 }
 
+export interface JevVerdict {
+  at: number;
+  model: string;
+  /** Probability (0–1) that the launch is a scam. */
+  scam: number;
+  /** Expected risk level, 0 (low) to 3 (extreme). */
+  risk: number;
+  pattern: string;
+  patternConf: number;
+}
+
 export interface TimelineEvent { t: number; text: string; kind: 'info' | 'good' | 'warn' }
 
 export interface TokenState {
@@ -120,6 +131,10 @@ export interface TokenState {
 
   audit?: Audit;
   auditQueued: boolean;
+  /** Last verdict from the Jev scam judge (TypeSafe System One), if it has run. */
+  jev?: JevVerdict;
+  jevQueued?: boolean;
+  jevTriedAt?: number;
   gates: Record<string, AgentResult>;
   signals: Record<string, AgentResult>;
   scoreParts: Record<string, number>;

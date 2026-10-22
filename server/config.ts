@@ -52,6 +52,23 @@ export const config = {
   priceProUsd: int(env.PRICE_PRO_USD, 29),
   priceApexUsd: int(env.PRICE_APEX_USD, 79),
 
+  /**
+   * Jev scam judge (TypeSafe AI System One, via the official @typesafe-ai/sdk). Off without a key.
+   * Only judges tokens that passed the hard gates with traction, once per recheck window, within a daily budget.
+   */
+  jev: {
+    apiKey: env.TYPESAFE_API_KEY || '',
+    baseUrl: env.TYPESAFE_BASE_URL || '',
+    /** Pinned so verdicts stay consistent; jev-latest moves when TypeSafe ships a new version. */
+    model: env.JEV_MODEL || 'jev-1.13.0',
+    minScore: int(env.JEV_MIN_SCORE, 55),
+    warnAt: Number(env.JEV_WARN_AT || 0.6),
+    blockAt: Number(env.JEV_BLOCK_AT || 0.9),
+    recheckMs: int(env.JEV_RECHECK_MS, 10 * 60_000),
+    dailyCalls: int(env.JEV_DAILY_CALLS, 5000),
+    timeoutMs: int(env.JEV_TIMEOUT_MS, 5000),
+  },
+
   /** Verified emails that can open the admin dashboard and receive owner alerts on Telegram. */
   adminEmails: list(env.ADMIN_EMAILS).map((e) => e.toLowerCase()),
 

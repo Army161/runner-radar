@@ -13,8 +13,8 @@ interface ViewCtx { cfg: Config; solUsd: number | null; now: number }
 
 function safety(t: TokenState): 'PASS' | 'WARN' | 'FAIL' | 'PENDING' {
   const core = ['contract', 'honeypot', 'vamp', 'dev'].map((k) => t.gates[k]?.status);
-  if (core.includes('fail')) return 'FAIL';
-  if (core.includes('warn') || t.gates.bundle?.status === 'warn') return 'WARN';
+  if (core.includes('fail') || t.gates.jev?.status === 'fail') return 'FAIL';
+  if (core.includes('warn') || t.gates.bundle?.status === 'warn' || t.gates.jev?.status === 'warn') return 'WARN';
   if (core.every((s) => s === 'pass')) return 'PASS';
   return 'PENDING';
 }

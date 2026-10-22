@@ -13,6 +13,7 @@ import { Replay, ReplayChain } from './sources/replay.ts';
 import { BudgetedFeed, DemoFeed } from './sources/feed.ts';
 import type { TradeFeed } from './sources/feed.ts';
 import { Orchestrator } from './agents/orchestrator.ts';
+import { JevJudge } from './agents/jev.ts';
 import { AlertEngine, OwnerAlerts, Telegram } from './alerts.ts';
 import { Backups } from './backup.ts';
 import { Billing } from './billing.ts';
@@ -51,7 +52,9 @@ if (cfg.demo) {
   if (!cfg.rpcUrl) log.warn('SOLANA_RPC_URL not set — contract and honeypot checks will show as pending.');
 }
 
-const orch = new Orchestrator({ cfg, db, bus, chain, store, feed, dex, extraSmart: replay?.smartWallets });
+const jev = cfg.jev.apiKey ? new JevJudge(cfg) : null;
+if (!jev) log.warn('TYPESAFE_API_KEY not set — the Jev scam judge is off.');
+const orch = new Orchestrator({ cfg, db, bus, chain, store, feed, dex, jev, extraSmart: replay?.smartWallets });
 const tg = new Telegram(cfg, db);
 const alerts = new AlertEngine(cfg, db, bus, tg, orch);
 const auth = new Auth(cfg, db);
@@ -63,7 +66,7 @@ const limiter = new RateLimiter();
 
 const router = new Router();
 auth.routes(router);
-apiRoutes(router, { cfg, db, bus, store, orch, tg, alerts, pump, dex, feed, backups, billing });
+apiRoutes(router, { cfg, db, bus, store, orch, tg, alerts, pump, dex, feed, backups, billing, jev });
 router.add('GET', '/healthz', () => ({ ok: true }));
 
 const server = createServer(async (req, res) => {

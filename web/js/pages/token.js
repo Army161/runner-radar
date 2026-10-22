@@ -2,7 +2,7 @@ import { api, html, paint, icon, toast, money, int, age, pct, scoreClass, safeUr
 import { getMe } from '../main.js';
 import { shell } from '../shell.js';
 
-const GATE_ORDER = ['contract', 'honeypot', 'vamp', 'dev', 'bundle'];
+const GATE_ORDER = ['contract', 'honeypot', 'vamp', 'dev', 'bundle', 'jev'];
 const PART_LABELS = { momentum: 'Momentum', holders: 'Holder health', smart: 'Smart money', narrative: 'Narrative / social', dev: 'Dev reputation' };
 const STATUS_ICON = { pass: 'check', fail: 'x', warn: 'warn', pending: 'dot' };
 
@@ -99,7 +99,7 @@ export async function mount(root, { mint }) {
 
         <div class="col">
           <section class="card pad">
-            <div class="row between"><h2>Safety gate</h2><span class="badge ${passCount === 5 ? 'pass' : blocked ? 'fail' : 'warn'}">${passCount} / 5 PASS</span></div>
+            <div class="row between"><h2>Safety gate</h2><span class="badge ${passCount === gates.length ? 'pass' : blocked ? 'fail' : 'warn'}">${passCount} / ${gates.length} PASS</span></div>
             <ul class="gates">${gates.map((g) => html`<li class="${g.status}">${icon(STATUS_ICON[g.status], 18)}<div><b>${g.agent}</b><span>${g.summary}</span></div></li>`)}</ul>
           </section>
 

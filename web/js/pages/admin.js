@@ -52,6 +52,7 @@ export async function mount(root) {
         ${stat('DEPLOYERS SEEN', int(d.pipeline.deployersSeen))}
         ${stat('KNOWN RUGGERS', int(d.pipeline.ruggersKnown))}
         ${f.mode === 'paid' ? stat('TRADE FEED TODAY', `${int(f.eventsToday)} / ${int(f.budget)}`, `≈${f.estSolToday} SOL · ${f.subscribed} streaming · ${int(f.skippedToday)} skipped`) : stat('TRADE FEED', f.mode === 'demo' ? 'Demo' : 'Free mode', f.mode === 'free' ? 'Add PUMPPORTAL_API_KEY for live trades' : '')}
+        ${d.jev?.enabled ? stat('JEV SCAM JUDGE', `${int(d.jev.callsToday)} / ${int(d.jev.budget)}`, d.jev.lastError ? `Last call failed: ${d.jev.lastError}` : `calls today · ${d.jev.model} · ≈$${(d.jev.callsToday * 0.00005).toFixed(2)}`) : stat('JEV SCAM JUDGE', 'Off', 'Add TYPESAFE_API_KEY to enable')}
         ${stat('LAST BACKUP', d.backups?.lastAt ? `${ago(d.backups.lastAt)} ago` : 'none yet', d.backups?.lastError ? `Last attempt failed: ${d.backups.lastError}` : `daily, keeps ${d.backups?.keep ?? 7}`)}
       </div>
 

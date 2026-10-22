@@ -2,11 +2,13 @@ import type { AgentResult, TokenState } from '../types.ts';
 import type { Config } from '../config.ts';
 import type { WalletRep } from '../db.ts';
 import { dangerousExtensions } from '../sources/chain.ts';
+import { jevGate } from './jev.ts';
 
 /**
  * Gatekeeper agents. Each is a pure function of the token's state so it can be
- * re-run cheaply on every update and unit-tested. A "fail" from any of the first
- * four is a hard block; bundle metrics are judged against each user's limits.
+ * re-run cheaply on every update and unit-tested. A "fail" from contract, honeypot,
+ * vamp, dev or the Jev scam judge is a hard block; bundle metrics are judged against
+ * each user's limits.
  */
 
 export interface VampMatch { hard: boolean; mint: string; symbol: string; why: string }
@@ -124,7 +126,7 @@ export function bundleScan(t: TokenState, ctx: GateCtx): AgentResult {
   return r(A, 'pass', `Bundle ${h.bundlePct.toFixed(1)}% · snipers ${h.sniperPct.toFixed(1)}% · top 10 ${h.top10Pct.toFixed(1)}%`, metrics);
 }
 
-export const GATE_TAGS: Record<string, string> = { contract: 'AUTHORITY', honeypot: 'HONEYPOT', vamp: 'VAMP', dev: 'DEV HISTORY' };
+export const GATE_TAGS: Record<string, string> = { contract: 'AUTHORITY', honeypot: 'HONEYPOT', vamp: 'VAMP', dev: 'DEV HISTORY', jev: 'AI SCAM' };
 
 export function runGates(t: TokenState, ctx: GateCtx): Record<string, AgentResult> {
   return {
@@ -133,6 +135,7 @@ export function runGates(t: TokenState, ctx: GateCtx): Record<string, AgentResul
     vamp: vampDetector(t, ctx),
     dev: devForensics(t, ctx),
     bundle: bundleScan(t, ctx),
+    jev: jevGate(t, ctx.cfg),
   };
 }
 

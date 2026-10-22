@@ -10,6 +10,7 @@ import type { DexScreener } from '../sources/dexscreener.ts';
 import type { TradeFeed } from '../sources/feed.ts';
 import type { Backups } from '../backup.ts';
 import type { Billing, Tier } from '../billing.ts';
+import type { JevJudge } from '../agents/jev.ts';
 import { TIERS, bumpScan, scansToday, tierOf } from '../billing.ts';
 import { playbookFor } from '../playbook.ts';
 import { recentErrors } from '../util.ts';
@@ -25,6 +26,7 @@ import { isBase58Address, str } from '../util.ts';
 interface Deps {
   cfg: Config; db: DB; bus: EventEmitter; store: TokenStore; orch: Orchestrator; tg: Telegram; alerts: AlertEngine;
   pump: PumpPortal | null; dex: DexScreener | null; feed: TradeFeed; backups: Backups | null; billing: Billing;
+  jev?: JevJudge | null;
 }
 
 interface Client { userId: string; res: ServerResponse; tab: Tab; win: string; last: string }
@@ -220,6 +222,7 @@ export function apiRoutes(r: Router, d: Deps) {
       pipeline: { watching: store.size, ruggersKnown: one('SELECT COUNT(*) AS n FROM wallets_rep WHERE rugs > 0'), deployersSeen: one('SELECT COUNT(*) AS n FROM wallets_rep WHERE launches > 0') },
       feed: d.feed.status(),
       backups: d.backups?.status() ?? null,
+      jev: d.jev?.status() ?? { enabled: false },
       errors: [...recentErrors].reverse().slice(0, 20),
       uptimeSec: Math.round(process.uptime()),
       memoryMb: Math.round(process.memoryUsage().rss / 1e6),

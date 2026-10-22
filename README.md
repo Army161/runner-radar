@@ -1,6 +1,6 @@
 # Runner Radar
 
-A multi-agent Solana meme coin scanner. Every new pump.fun launch runs through five **gatekeeper** agents (one hard fail blocks it, with the reason shown). Survivors are scored by **signal** agents into a 0–100 **Runner Score**. Runners reach your board and Telegram, and exit signals follow the tokens you were alerted on.
+A multi-agent Solana meme coin scanner. Every new pump.fun launch runs through six **gatekeeper** agents (one hard fail blocks it, with the reason shown). Survivors are scored by **signal** agents into a 0–100 **Runner Score**. Runners reach your board and Telegram, and exit signals follow the tokens you were alerted on.
 
 Includes a landing page, Google / Discord / X sign-up and login, a 3-step onboarding, the live scanner, token deep-dive pages, a watchlist, an alerts inbox, the Runner Playbook (step-by-step strategy guide), a settings page with billing, Stripe monthly subscriptions, and an admin dashboard with MRR and track record. It installs on a phone home screen as an app.
 
@@ -15,7 +15,7 @@ Includes a landing page, Google / Discord / X sign-up and login, a 3-step onboar
 ```bash
 node -v            # needs v22.18 or newer
 npm run demo       # simulated market + one-click dev login → http://localhost:8787 (works on Windows, macOS, Linux)
-npm test           # 31 tests: agents, filters, rug memory, feed budget, backups, OAuth/session security, billing, API
+npm test           # 36 tests: agents, filters, rug memory, feed budget, backups, OAuth/session security, billing, API
 ```
 
 Demo mode simulates launches on a real constant-product curve, including honeypots, vamps, bundles, serial ruggers and real runners, so you can see every agent fire. It is clearly labelled in the UI.
@@ -27,8 +27,9 @@ Demo mode simulates launches on a real constant-product curve, including honeypo
 3. Add at least one **OAuth app** (below).
 4. Recommended: **`PUMPPORTAL_API_KEY`** for the live trade stream (see Costs).
 5. Set **`ADMIN_EMAILS`** to the email you sign in with. That gives you the Admin page, and owner alerts if you link Telegram.
-6. Optional: **Telegram** (`TELEGRAM_BOT_TOKEN` and `TELEGRAM_BOT_USERNAME` from @BotFather) and global `SMART_WALLETS`.
-7. `npm start`
+6. Recommended: **`TYPESAFE_API_KEY`** for the Jev scam judge (see below). Get one at [console.typesafe.ai](https://console.typesafe.ai).
+7. Optional: **Telegram** (`TELEGRAM_BOT_TOKEN` and `TELEGRAM_BOT_USERNAME` from @BotFather) and global `SMART_WALLETS`.
+8. `npm install` then `npm start`
 
 ### OAuth apps
 
@@ -78,6 +79,7 @@ Other hosts (Fly.io, Railway, a VPS) work the same way. Run `npm start` on Node 
 | Hosting (Render Starter + 1 GB disk) | ~$7/month plus a small disk fee | Hobby workspace is free |
 | PumpPortal live trade stream | 0.01 SOL per 10,000 events | Capped by `FEED_DAILY_EVENTS` (default 50,000/day ≈ 0.05 SOL/day max). Paced evenly through the day. Runners and watched tokens first |
 | Solana RPC | free plan to start | Calls are only spent on tokens with 5+ buys, and are rate-limited |
+| Jev scam judge (TypeSafe) | ~$0.00005 per token judged | $0.042 per million input tokens, output free. Only tokens that passed the hard gates with Runner Score ≥ 55, at most once per 10 min, capped by `JEV_DAILY_CALLS` (default 5,000/day ≈ $0.25/day max) |
 | DexScreener, Jupiter, Telegram | free | |
 
 The scanner header shows today's feed usage ("Feed 12k/50k"). Hover it for the estimated SOL, tokens streaming, and launches skipped to stay on budget.
@@ -130,7 +132,8 @@ pump.fun stream (PumpPortal) ─┐                 ┌─ Contract auditor ─�
 DexScreener trending (1/min) ─┼─► token store ─►├─ Honeypot simulator ├─► any FAIL → blocked (+ reason)
 Tracked-wallet trades ────────┘                 ├─ Vamp detector      │
 Solana RPC + Jupiter (lazy) ───────────────────►├─ Dev forensics      │
-                                                └─ Bundle & sniper ───┘
+                                                ├─ Bundle & sniper    │
+                                                └─ Jev scam judge ────┘  (TypeSafe System One, survivors only)
                                                          │ survivors
                     Momentum · Holder health · Smart money · Narrative · Dev reputation · Graduation watch
                                                          │
@@ -144,6 +147,7 @@ Solana RPC + Jupiter (lazy) ─────────────────�
 | **Vamp detector** | Same name+ticker, same image (IPFS CID) or same X account as an earlier token. The earliest one is the original. |
 | **Dev forensics** | Deployer launch and rug history, kept in its own database. Optionally checks the wallet that funded the deployer. Flags early dev dumps. |
 | **Bundle & sniper scan** | Supply bought in the launch window, look-alike buy sizes (one buyer, many wallets), sniper bags, top-10 and dev share |
+| **Jev scam judge** | Sends the measurements above (never your keys or users' data) to [Jev](https://typesafe.ai), TypeSafe AI's System One decision model, through its official SDK. Jev returns a calibrated scam probability, a 0–3 risk level and the launch pattern (organic, insider, dev dump, copycat, dead, too early). Warns at 60%, blocks at 90%. Creator-written text is labelled untrusted, which makes it harder for a scammer's description to sway the verdict. |
 | **Momentum** | 5-minute volume, buy/sell balance, unique buyers, price move, curve velocity |
 | **Smart money** | Tracked wallets holding or exiting, via a live account-trade subscription |
 | **Narrative** | Socials present, X account reused from another token, DexScreener boost or profile |
@@ -181,7 +185,7 @@ Solana RPC + Jupiter (lazy) ─────────────────�
 ```
 server/
   index.ts              boot: sources → orchestrator → alerts → HTTP
-  agents/               gates.ts · signals.ts · orchestrator.ts · filters.ts (per-user presets/limits)
+  agents/               gates.ts · signals.ts · orchestrator.ts · filters.ts (per-user presets/limits) · jev.ts (TypeSafe Jev judge)
   sources/              pumpportal.ts · dexscreener.ts · chain.ts (RPC/Jupiter) · metadata.ts · replay.ts (demo)
   http/                 core.ts (router, headers, rate limit) · auth.ts (OAuth + sessions) · api.ts (REST + SSE) · views.ts
   alerts.ts             Telegram bot + alert engine
